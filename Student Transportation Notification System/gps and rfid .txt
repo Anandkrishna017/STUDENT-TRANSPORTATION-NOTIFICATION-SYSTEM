@@ -1,0 +1,206 @@
+#include <SPI.h>
+#include <MFRC522.h>
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+
+TinyGPSPlus gps;  // The TinyGPS++ object
+SoftwareSerial ss(4, 5); // The serial connection to the GPS device
+
+WiFiClient client;
+
+const char* ssid = "Redmi Note 7S";
+const char* password = "hello..!";
+const char* device_token = "bb9180ecd3316889";
+String URL = "http://192.168.43.141/rfidattendance/getdata.php"; // Replace with your server URL
+String getData,Link;
+
+float latitude, longitude;
+int year, month, date, hour, minute, second;
+String date_str, time_str, lat_str, lng_str;
+int pm;
+
+WiFiServer server(80);
+
+#define SS_PIN D3  // D2
+#define RST_PIN D0  // D1
+MFRC522 mfrc522(SS_PIN, RST_PIN); // Create MFRC522 instance.
+
+String OldCardID = "";
+unsigned long previousMillis = 0;
+
+void setup() {
+  Serial.begin(115200);
+  ss.begin(9600);
+
+  SPI.begin();  // Init SPI bus
+  mfrc522.PCD_Init(); // Init MFRC522 card
+
+  connectToWiFi();
+  server.begin();
+}
+
+void loop() {
+  gpsget();
+  
+  // RFID Section
+  if (millis() - previousMillis >= 15000) {
+    previousMillis = millis();
+    OldCardID = "";
+  }
+
+  delay(50);
+
+  if (!mfrc522.PICC_IsNewCardPresent()) {
+    return;
+  }
+
+  if (!mfrc522.PICC_ReadCardSerial()) {
+    return;
+  }
+
+  String CardID = "";
+  for (byte i = 0; i < mfrc522.uid.size; i++) {
+    CardID += mfrc522.uid.uidByte[i];
+  }
+
+  if (CardID == OldCardID) {
+    return;
+  } else {
+    OldCardID = CardID;
+  }
+
+  Serial.println(CardID);
+  SendCardID(CardID);
+  delay(100);
+  // GPS Section
+  
+
+  // Check if a client has connected
+  
+}
+
+void SendCardID(String Card_uid) {
+  Serial.println("Sending the Card ID");
+  if(WiFi.isConnected()){
+    HTTPClient http;    //Declare object of class HTTPClient
+    //GET Data
+    getData = "?card_uid=" + String(Card_uid) + "&device_token=" + String(device_token); // Add the Card ID to the GET array in order to send it
+    IPAddress localIP = WiFi.localIP();
+    getData += "&ip=" + localIP.toString();
+    //GET methode
+    Link = URL + getData;
+    // http.begin(Link); //initiate HTTP request   //Specify content-type header
+     http.begin(client, Link);
+    int httpCode = http.GET();   //Send the request
+    String payload = http.getString();    //Get the response payload
+     
+   Serial.println(Link);   //Print HTTP return code
+    Serial.println(httpCode);   //Print HTTP return code
+    Serial.println(Card_uid);     //Print Card ID
+    Serial.println(payload);    //Print request response payload
+
+    if (httpCode == 200) {
+      if (payload.substring(0, 5) == "login") {
+        String user_name = payload.substring(5);
+    //  Serial.println(user_name);
+
+      }
+      else if (payload.substring(0, 6) == "logout") {
+        String user_name = payload.substring(6);
+    //  Serial.println(user_name);
+        
+      }
+      else if (payload == "succesful") {
+
+      }
+      else if (payload == "available") {
+
+      }
+      delay(100);
+      http.end();  //Close connection
+    }
+  }
+}
+
+void connectToWiFi() {
+  WiFi.mode(WIFI_OFF);        //Prevents reconnection issue (taking too long to connect)
+    delay(1000);
+    WiFi.mode(WIFI_STA);
+    Serial.print("Connecting to ");
+    Serial.println(ssid);
+    WiFi.begin(ssid, password);
+    
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+    }
+    Serial.println("");
+    Serial.println("Connected");
+  
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());  //IP address assigned to your ESP
+    
+    delay(1000);
+}
+void gpsget(){
+  while (ss.available() > 0) {
+    if (gps.encode(ss.read())) {
+      if (gps.location.isValid()) {
+        latitude = gps.location.lat();
+        lat_str = String(latitude, 6);
+        longitude = gps.location.lng();
+        lng_str = String(longitude, 6);
+      }
+    }
+  }
+  WiFiClient client = server.available();
+  if (!client) {
+    return;
+  }
+String s = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n <!DOCTYPE html> <html> <head> <title>GPS Interfacing with NodeMCU</title> <style>";
+
+ s += "a:link {background-color: YELLOW;text-decoration: none;}";
+
+ s += "table, th, td {border: 1px solid black;} </style> </head> <body> ";
+
+ s += "<p ALIGN=CENTER style=""font-size:150%;""";
+
+  s += "> <b>Location Details</b></p> <table ALIGN=CENTER style="; 
+
+  s += "width:50%"; 
+
+  s += "> <tr> <th>Latitude</th>"; 
+
+  s += "<td ALIGN=CENTER >"; 
+
+  s += lat_str; 
+
+  s += "</td> </tr> <tr> <th>Longitude</th> <td ALIGN=CENTER >"; 
+
+  s += lng_str; 
+
+  s += "</td>"; 
+
+  s += "  </tr> </table> "; 
+
+  if (gps.location.isValid())  { 
+
+     s += "<p align=center><a style=""color:RED;font-size:125%;"" href=""http://maps.google.com/maps?&z=15&mrt=yp&t=k&q=";
+
+    s += lat_str; 
+
+    s += "+"; 
+
+    s += lng_str; 
+
+    s += """ target=""_top"">Click here!</a> To check the location in Google maps.</p>"; 
+
+  } 
+
+  s += "</body> </html> \n"; 
+
+  client.print(s); 
+}
+
