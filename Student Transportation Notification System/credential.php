@@ -1,5 +1,5 @@
 <?php
-   define('EMAIL','anandkrishna017@gmail.com');
-   define('PASS','pmgyzyvnxstoyufp');
+   define('EMAIL','email@gmail.com');
+   define('PASS','password');
 
 ?>
