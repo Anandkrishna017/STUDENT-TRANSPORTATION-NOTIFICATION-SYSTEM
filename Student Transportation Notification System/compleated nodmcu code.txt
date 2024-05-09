@@ -10,7 +10,7 @@ SoftwareSerial ss(4, 5); // The serial connection to the GPS device
 
 const char *ssid = "Wifi-username";
 const char *password = "Wifi-Password";
-const char *device_token = "8f924a3aee4c4fe7";
+const char *device_token = "Token generated in UI";
 String URL = "http://192.168.43.141/rfidattendance/getdata.php";
 String getData, Link;
 
